@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  自定义源播放器。
+
+  视频由【原生 VideoView】承载（见 CustomActivity 里的取舍说明），
+  左侧选台面板 + 管理浮层叠一层【透明 WebView】—— 这样面板能 100% 复用
+  央视频那套 inject.css 的观感（行高凑整数、光标态、气泡），不必再手写一套原生样式。
+
+  层级（从下往上，即绘制顺序）：
+    video      原生 VideoView。它是 SurfaceView，必须放最底层
+    panelWeb   透明 WebView，画左侧选台面板 + 管理浮层
+    status     原生状态层：连接中 / 失败原因
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_black">
+
+    <!-- 原生播放层 -->
+    <VideoView
+        android:id="@+id/video"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_gravity="center" />
+
+    <!-- 面板层：内容全透明，只有面板/浮层自己画东西 -->
+    <WebView
+        android:id="@+id/panelWeb"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- 状态提示：起播中 / 失败原因 -->
+    <LinearLayout
+        android:id="@+id/status"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/statusTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/brand_red"
+            android:textSize="26sp"
+            android:text="正在连接…" />
+
+        <TextView
+            android:id="@+id/statusMsg"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:layout_marginStart="120dp"
+            android:layout_marginEnd="120dp"
+            android:gravity="center"
+            android:lineSpacingExtra="4dp"
+            android:textColor="@color/text_dim"
+            android:textSize="15sp" />
+    </LinearLayout>
+</FrameLayout>

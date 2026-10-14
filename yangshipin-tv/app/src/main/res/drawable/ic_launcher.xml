@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  央视频TV 桌面图标（矢量版）
+
+  ⚠️ 这个文件 1.5 才回来的。1.4 之前 minSdk 是 19，minSdk<21 时 AAPT2 会把每个
+     VectorDrawable **烘成一整套各密度的 PNG** 塞进包里，而且烘出来的比手写的
+     位图更大更差（实测 release 124,461 → 只留位图 115,715），所以 1.4 把它删了。
+     minSdk 提到 21 之后 AAPT2 不再烘，矢量图终于只占它自己这几百字节，
+     于是一套 5 档 PNG（mdpi~xxxhdpi）全部删掉。详见 README §26。
+
+  与位图版（tools/gen_icons.py）严格同构：同一个 108dp 设计空间、同一组颜色、
+  同一个圆角 24 的黑底 + 半径 38 的红圆 + 白三角，换过去观感不该有差别。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 圆角矩形底：#101012，圆角 24 -->
+    <path
+        android:fillColor="#101012"
+        android:pathData="M24,0 L84,0 A24,24 0 0 1 108,24 L108,84 A24,24 0 0 1 84,108
+                          L24,108 A24,24 0 0 1 0,84 L0,24 A24,24 0 0 1 24,0 Z" />
+
+    <!-- 播放圆：#E60012，圆心 (54,54) 半径 38 -->
+    <path
+        android:fillColor="#E60012"
+        android:pathData="M54,16 A38,38 0 1 1 54,92 A38,38 0 1 1 54,16 Z" />
+
+    <!-- 三角：白，(44,36) (44,72) (72,54) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M44,36 L72,54 L44,72 Z" />
+</vector>

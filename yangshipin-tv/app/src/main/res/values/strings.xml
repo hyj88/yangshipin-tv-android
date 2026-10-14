@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">央视频TV</string>
+    <string name="custom_source_name">自定义源</string>
+    <string name="loading">正在载入直播…</string>
+    <string name="hint">上/下 直接换台 · 确认键 弹出选台面板 · 左/右 切换 CCTV/卫视 · 菜单键 收起面板</string>
+    <string name="hint_custom">上/下 换台 · 确认键 选台面板 · 左/右 切分组 · 菜单键 源管理</string>
+</resources>

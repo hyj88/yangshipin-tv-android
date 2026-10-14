@@ -1,0 +1,4 @@
+// 顶层构建文件：只声明 Android Gradle Plugin，版本与本地缓存对齐
+plugins {
+    id 'com.android.application' version '8.5.0' apply false
+}

@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>央视频TV · 自定义源导入</title>
+<!--
+  「局域网导入」的表单页，由 LanImportServer 在电视上直接吐给手机/电脑的浏览器。
+  ⚠️ 故意不引任何外部资源（字体/CDN/图标），电视所在网络可能出不了公网。
+-->
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 18px 16px 40px;
+    font: 15px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+    color: #1a1a1c; background: #f5f5f7;
+  }
+  .wrap { max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 19px; margin: 0 0 4px; }
+  .sub { color: #6b6b70; font-size: 13px; margin-bottom: 18px; }
+  h2 { font-size: 15px; margin: 0 0 10px; }
+  h2 .tag { font-size: 11px; font-weight: 500; color: #b0201f; background: #fdeaea;
+            padding: 1px 6px; border-radius: 4px; margin-left: 6px; vertical-align: 1px; }
+  .card { background: #fff; border-radius: 12px; padding: 16px; margin-bottom: 14px;
+          box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  label { display: block; font-size: 13px; color: #6b6b70; margin-bottom: 6px; }
+  input[type=text], textarea {
+    width: 100%; padding: 11px 12px; font-size: 15px; font-family: inherit;
+    border: 1px solid #d5d5da; border-radius: 9px; background: #fbfbfc; color: #1a1a1c;
+  }
+  textarea { min-height: 190px; resize: vertical; font-family: ui-monospace, Menlo, Consolas, monospace;
+             font-size: 13px; line-height: 1.5; }
+  input:focus, textarea:focus { outline: none; border-color: #e60012; background: #fff; }
+  .row { display: flex; gap: 10px; margin-top: 12px; }
+  button {
+    flex: 1; padding: 12px 14px; font-size: 15px; font-family: inherit; font-weight: 600;
+    border: none; border-radius: 9px; background: #e60012; color: #fff; cursor: pointer;
+  }
+  button.ghost { background: #ebebee; color: #33333a; font-weight: 500; }
+  button:disabled { opacity: .5; }
+  .msg { margin-top: 12px; padding: 11px 13px; border-radius: 9px; font-size: 14px; display: none; }
+  .msg.ok  { display: block; background: #e8f7ec; color: #14622c; }
+  .msg.bad { display: block; background: #fdeaea; color: #8d1c1c; }
+  .msg.run { display: block; background: #eef1f6; color: #3a3f49; }
+  .tips { color: #6b6b70; font-size: 13px; }
+  .tips code { background: #ededf0; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+  .tips b { color: #1a1a1c; }
+  ul { list-style: none; margin: 8px 0 0; padding: 0; max-height: 320px; overflow: auto; }
+  li { display: flex; gap: 8px; align-items: baseline; padding: 7px 0; border-top: 1px solid #f0f0f2;
+       font-size: 13.5px; }
+  li:first-child { border-top: none; }
+  li .nm { flex: 0 1 auto; }
+  li .grp { flex: 0 0 auto; font-size: 11px; color: #8a8a90; background: #f0f0f2;
+            padding: 1px 6px; border-radius: 4px; }
+  li .u { flex: 1 1 60px; min-width: 0; color: #9a9aa0; font-size: 12px; text-align: right;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .head { display: flex; align-items: center; justify-content: space-between; }
+  .head span { font-size: 13px; color: #6b6b70; }
+  /* 记住的清单地址：长 URL 必须能折行，否则手机上一眼看不到尾巴 */
+  .rmem { margin-top: 10px; padding: 9px 11px; background: #f6f6f8; border-radius: 8px;
+          font-size: 12.5px; color: #4a4a52; word-break: break-all; display: none; }
+  .rmem.on { display: block; }
+  .rmem b { display: block; color: #6b6b70; font-weight: 500; font-size: 12px; margin-bottom: 3px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>自定义源导入</h1>
+  <div class="sub">在手机上填，内容会直接存到电视上的「央视频TV」里。电视那边不用重新启动。</div>
+
+  <!-- ============ 从网址导入 ============ -->
+  <div class="card">
+    <h2>从网址导入<span class="tag">推荐</span></h2>
+    <label>一份 m3u 清单的网址（不是某一路直播的地址）</label>
+    <input type="text" id="rurl" autocomplete="off" spellcheck="false"
+           placeholder="https://raw.githubusercontent.com/best-fan/iptv-sources/master/cn_all.m3u8">
+    <div class="row">
+      <button id="rgo">抓取并导入</button>
+      <button id="rre" class="ghost" disabled>重新导入上次的</button>
+    </div>
+    <div class="msg" id="rmsg"></div>
+    <div class="rmem" id="rmem"><b>已记住的清单地址</b><span id="rurls"></span></div>
+    <div class="tips" style="margin-top:10px">
+      由电视自己去抓这一份清单，<b>抓完会把地址记住</b>，以后在电视上按「菜单 → 刷新远程清单」
+      就能一键更新，不用再输一遍。<br>
+      给的是一个直播地址（<code>…/xxx.m3u8</code> 直接就是一路流）也没问题：
+      抓回来不是频道清单时，会把它当成单独一条源收下。
+    </div>
+  </div>
+
+  <!-- ============ 粘贴文本 ============ -->
+  <div class="card">
+    <h2>粘贴清单内容</h2>
+    <label>粘贴 M3U / m3u8 列表，或一行播放地址</label>
+    <textarea id="text" placeholder="#EXTM3U
+#EXTINF:-1 group-title=&quot;央视&quot;,CCTV-1 综合
+http://example.com/cctv1.m3u8
+
+或者只贴一行：
+http://example.com/live.m3u8"></textarea>
+    <label style="margin-top:12px">名称（只贴一行地址时用得上，可留空）</label>
+    <input type="text" id="name" placeholder="例如：CCTV-1 综合">
+    <div class="row">
+      <button id="go">导入</button>
+      <button id="clr" class="ghost">清空全部</button>
+    </div>
+    <div class="msg" id="msg"></div>
+  </div>
+
+  <div class="card tips">
+    <b>认得的写法</b><br>
+    · 标准 <code>#EXTINF:-1 group-title="央视",名称</code> + 下一行地址<br>
+    · <code>#EXTGRP:卫视</code> 单独一行给分组<br>
+    · 地址尾巴带请求头：<code>http://a/b.m3u8|Referer=http://c/</code><br>
+    · <code>#EXTVLCOPT:http-user-agent=…</code><br>
+    · 什么都不带，一行一个 <code>http(s)://</code> 地址<br><br>
+    <b>编码与体积</b><br>
+    自动认 UTF-8 / GBK（中文源不少是 GBK）；单次导入最多 2000 条，超出的会被截掉。
+    按网址去重，导入重复的会自动跳过。
+  </div>
+
+  <div class="card">
+    <div class="head">
+      <label style="margin:0">电视上现有的源</label>
+      <span id="count">…</span>
+    </div>
+    <ul id="list"></ul>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+
+  function say(el, kind, text) {
+    el.className = 'msg ' + kind;
+    el.textContent = text;
+  }
+
+  function err(e) { return '请求失败：' + (e && e.message ? e.message : e); }
+
+  /* 服务端回报的「已记住的清单地址」。
+     ⚠️ 为什么要提成模块级变量：post() 的收尾一定会把按钮重新启用，
+        如果按钮可用性只按「本次请求结束了」来算，那么在「没有记住任何地址」的
+        机器上，「重新导入上次的」会变成可点的死按钮。可用性只能由这一份状态决定。 */
+  var remote = '';
+
+  /**
+   * 「重新导入上次的」按钮的唯一开关。
+   * ⚠️ 曾经的 bug：只写了调用、忘了写定义（syncButtons is not defined），
+   *    结果是按钮重新启用的同时抛 ReferenceError —— 而它在 Promise 链里，
+   *    既不会弹窗也不会写日志，只在控制台一闪而过。所以这里的定义是必须的，
+   *    并且测试里加了「页面无 JS 未捕获异常」这条断言来兜它（见 README §23）。
+   */
+  function syncButtons() {
+    var btn = $('rre');
+    if (!btn) return;
+    btn.disabled = !remote;
+    btn.title = remote ? ('重新抓一次：' + remote) : '还没有记住的清单地址';
+  }
+
+  /** 记住的清单地址：填进输入框 + 显示出来 + 决定「重新导入」可不可点 */
+  function showRemote(u) {
+    remote = u || '';
+    var box = $('rmem');
+    if (remote) {
+      $('rurls').textContent = remote;
+      box.classList.add('on');
+      if (!$('rurl').value.trim()) $('rurl').value = remote;
+    } else {
+      box.classList.remove('on');
+    }
+    syncButtons();
+  }
+
+  function loadList() {
+    fetch('/api/list', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        var cap = d.max ? '（上限 ' + d.max + '）' : '';
+        $('count').textContent = '共 ' + d.total + ' 条' + cap
+          + (d.total > d.items.length ? '（只显示前 ' + d.items.length + '）' : '');
+        showRemote(d.remote);
+        var ul = $('list');
+        ul.textContent = '';
+        if (!d.total) {
+          var li0 = document.createElement('li');
+          li0.style.color = '#9a9aa0';
+          li0.textContent = '还没有源';
+          ul.appendChild(li0);
+          return;
+        }
+        d.items.forEach(function (it) {
+          var li = document.createElement('li');
+          var nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = it.name;
+          li.appendChild(nm);
+          if (it.group) {
+            var g = document.createElement('span'); g.className = 'grp'; g.textContent = it.group;
+            li.appendChild(g);
+          }
+          var u = document.createElement('span'); u.className = 'u';
+          u.textContent = it.url; u.title = it.url;
+          li.appendChild(u);
+          ul.appendChild(li);
+        });
+      })
+      .catch(function (e) { $('count').textContent = '读取失败'; });
+  }
+
+  /** 统一的「跑一个会联网的 POST，把结果说出来」 */
+  function post(url, body, msgEl, btn, busyText, onOk) {
+    say(msgEl, 'run', busyText);
+    btn.disabled = true;
+    var opt = { method: 'POST' };
+    if (body) {
+      opt.headers = { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' };
+      opt.body = body;
+    }
+    fetch(url, opt)
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        say(msgEl, d.ok ? 'ok' : 'bad', d.msg || (d.ok ? '完成' : '失败'));
+        if (d.ok && onOk) onOk(d);
+        loadList();
+      })
+      .catch(function (e) { say(msgEl, 'bad', err(e)); })
+      .then(function () { btn.disabled = false; syncButtons(); });
+  }
+
+  /* ---- 从网址导入 ---- */
+  $('rgo').addEventListener('click', function () {
+    var u = $('rurl').value.trim();
+    if (!u) { say($('rmsg'), 'bad', '网址还是空的'); return; }
+    if (!/^https?:\/\//i.test(u)) { say($('rmsg'), 'bad', '网址要以 http:// 或 https:// 开头'); return; }
+    post('/api/addurl', 'url=' + encodeURIComponent(u), $('rmsg'), $('rgo'),
+         '电视正在抓取…（大清单可能要十几秒）',
+         function () { $('rurl').value = ''; $('rurl').placeholder = u; });
+  });
+  $('rurl').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') $('rgo').click();
+  });
+
+  /* ---- 重新导入上次记住的那份 ---- */
+  $('rre').addEventListener('click', function () {
+    post('/api/refresh', '', $('rmsg'), $('rre'), '正在重新抓取…');
+  });
+
+  /* ---- 粘贴文本导入 ---- */
+  $('go').addEventListener('click', function () {
+    var text = $('text').value;
+    var name = $('name').value;
+    if (!text.trim()) { say($('msg'), 'bad', '内容还是空的'); return; }
+    post('/api/add',
+         'text=' + encodeURIComponent(text) + '&name=' + encodeURIComponent(name),
+         $('msg'), $('go'), '正在导入…',
+         function () { $('text').value = ''; });
+  });
+
+  /* ---- 清空 ---- */
+  $('clr').addEventListener('click', function () {
+    if (!confirm('确定清空电视上的全部自定义源？（记住的清单地址会保留，可以一键重新导入）')) return;
+    post('/api/clear', '', $('msg'), $('clr'), '正在清空…');
+  });
+
+  loadList();
+})();
+</script>
+</body>
+</html>

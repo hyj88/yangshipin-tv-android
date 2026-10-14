@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>自定义源</title>
+
+<!--
+  自定义源页 —— 由 CustomActivity 里的【透明 WebView】加载。
+
+  分层关系（从下往上）：
+     ① 原生 VideoView     —— 真正在播画面（MediaPlayer 直接吃 m3u8，不需要 MSE）
+     ② 本页 WebView       —— 只有左侧选台面板 + 管理浮层是可见的，其余全透明
+     ③ 原生状态层         —— 连接中 / 失败提示
+
+  ⚠️ 本页【故意】造成央视频首页那种 DOM 形状（#app > .tv-main-con > .tv-main-con-r …），
+     这样 inject.css / inject.js 可以原样复用 —— 面板观感、整行对齐滚动、
+     5 秒自动隐藏、手机触摸手势，全部与主界面一致，一行都不用重写。
+     唯一的差异（tab 是文字不是 logo 图）由 custom.css + custom.js 补。
+
+  ⚠️ 没有 .tv-main-con-l 这个元素，是故意的：inject.css §4 给它
+     position:fixed + 不透明黑底，造出来就把底下的原生视频整块盖掉。
+-->
+
+<!-- inject.js 的「首次手势提示」要等 video.videoWidth>0 才弹，
+     本页没有那个 <video>，会一直等到 15 秒超时才冒出来 —— 太晚。
+     改成由 custom.js 在真正起播后自己弹，这里先把那次一次性提示关掉。
+     本页是 file:// 源，与央视频的 https://www.yangshipin.cn 不是同一个源，
+     localStorage 互不影响，不会顺手把主界面的提示也吞掉。 -->
+<script>try { localStorage.setItem('ysp-touch-hint', '2'); } catch (e) {}</script>
+
+<link rel="stylesheet" href="inject.css">
+<link rel="stylesheet" href="custom.css">
+</head>
+
+<body>
+<div id="app">
+
+  <div class="tv-main-con">
+
+    <!-- 选台面板：结构、类名与央视频首页保持一致 -->
+    <div class="tv-main-con-r" id="yspPanel">
+      <div class="tv-main-con-r-tab" id="yspTabs"></div>
+      <div class="tv-main-con-r-list">
+        <div class="tv-main-con-r-list-left" id="yspList"></div>
+      </div>
+      <!-- 空态说明：放在 .tv-main-con-r 而不是列表里（理由见 custom.css） -->
+      <div class="ysp-empty" id="yspEmpty"></div>
+    </div>
+
+  </div>
+
+  <!-- 管理浮层：挂在 #app 内，否则会被 inject.css §1 的
+       `body > *:not(#app):not(#ysp-toast){display:none!important}` 干掉。
+       内容全部由 custom.js 渲染（菜单 / 屏上键盘两态）。 -->
+  <div id="ysp-manage">
+    <div class="mg-card" id="mgCard"></div>
+  </div>
+
+</div>
+
+<script src="inject.js"></script>
+<script src="custom.js"></script>
+</body>
+</html>

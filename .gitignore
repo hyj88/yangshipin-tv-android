@@ -1,0 +1,64 @@
+# ---- 构建产物 ----
+# app/build/ 是 gradle 的输出（可重新生成，且体积大）
+build/
+.gradle/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# ---- 本机配置（绝不能提交：含本机绝对路径）----
+local.properties
+*.keystore
+*.jks
+*.p12
+keystore.properties
+
+# ---- dist/：APK 与实机截图
+# 仓库里只保留「最新一版 release APK」作为安装入口（见 README），
+# 其余历史版本与全部截图不入库（加起来 130M+，对源码仓库没有价值）。
+dist/*
+!dist/yangshipin-tv-1.12-release.apk
+!dist/README.md
+
+# ---- 截图目录（每轮跑测试都会重新生成）----
+tools/shots/
+tools/shots_*/
+dist/shots*/
+
+# ---- IDE / 系统 ----
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+
+# ---- 临时 ----
+*.log
+*.tmp
+*.bak
+*.orig
+node_modules/
+
+# ---- 不入公开仓库的东西 ----
+# 我的工作笔记（会话记录、决策过程），与代码无关
+.workbuddy/
+
+# 逆向站点接口的调试工具：抓 token / 重放请求。
+# 它们记录了「怎么从央视频站点扒拉播放地址」的过程 ——
+# 技术上不属于本App，放在公开仓库里不合适（也让 README 关注的读者分心）。
+# 本地保留，需要时自己看。
+tools/token_probe.mjs
+tools/api_replay.mjs
+tools/api_probe.mjs
+tools/eavesdrop.mjs
+tools/hdr_probe.mjs
+tools/press_probe.mjs
+tools/stack_probe.mjs
+tools/lag_probe.mjs
+tools/hls_probe.mjs
+tools/browse_capability_probe.mjs
+tools/browser_capability_probe.mjs

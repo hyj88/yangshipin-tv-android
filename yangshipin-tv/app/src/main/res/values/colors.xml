@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="brand_red">#E60012</color>
+    <color name="bg_black">#FF000000</color>
+    <color name="panel_bg">#FF101012</color>
+    <color name="text_dim">#FF9AA0A6</color>
+</resources>

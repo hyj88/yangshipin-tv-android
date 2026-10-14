@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- 电视设备：不强制触摸屏；声明 leanback 但非必需，便于手机/盒子也能装 -->
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+
+    <application
+        android:allowBackup="true"
+        android:hardwareAccelerated="true"
+        android:icon="@drawable/ic_launcher"
+        android:label="@string/app_name"
+        android:banner="@drawable/tv_banner"
+        android:usesCleartextTraffic="true"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:supportsRtl="false"
+        android:theme="@style/AppTheme">
+
+        <!--
+          screenOrientation="landscape" 是「保底值」：
+          它保证冷启动第一帧就是横屏，即使 Java 侧的 applyOrientation() 出意外也不会竖起来。
+          MainActivity.onCreate/onResume 会按设备类型再细化 —— 电视维持硬锁，
+          手机升级成 sensorLandscape（强制横屏，但允许左右翻转）。
+          configChanges 必须带上 orientation|screenSize，否则切横竖屏会重建 Activity，
+          WebView 里的直播会被打断重连。
+        -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:screenOrientation="landscape"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|navigation|uiMode"
+            android:theme="@style/AppTheme">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <!-- Android TV 主屏入口 -->
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+                <!-- 普通安卓盒子的主屏入口 -->
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!--
+          自定义源播放器。**刻意不注册任何桌面入口**（v1.9 起）。
+
+          以前是有的（LEANBACK_LAUNCHER + LAUNCHER 都挂过），但实测有两个问题：
+            ① Google TV 桌面会把同一包名的多个 leanback 入口聚合成**一张卡片**，
+               于是「央视频TV」和「自定义源」两张卡片从来不会都出现（§29）；
+            ② 能分开显示的桌面（如某些盒子）上确实出现两张图标，但用户反馈
+               「装完出现两个图标」，而这两个本来就是一件事的两面 ——
+               「自定义源」是「央视频TV」里的一个面板，不是并列的第二个应用。
+
+          现在只留一个入口：主界面选台面板顶部那行常驻的「自定义源」
+          （v1.5.1 补的可见入口，v1.8 又在自定义源页内部补了「＋ 添加自定义源」）。
+          蓝键 / 菜单键长按 0.7 秒这两条隐藏操作也仍然有效（见 MainActivity）。
+
+          exported="true" 必须留着：主界面的入口（yspBridge.openCustom）走
+          startActivity，跨 Activity 同应用内其实不要求 exported，但保留最省心，
+          也让 `adb shell am start -n com.ysptv.player/.CustomActivity` 继续能直接调起来
+          （整套设备端测试都靠这条命令进这一页）。
+        -->
+        <activity
+            android:name=".CustomActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:screenOrientation="landscape"
+            android:label="@string/custom_source_name"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|navigation|uiMode"
+            android:theme="@style/AppTheme">
+        </activity>
+    </application>
+
+</manifest>

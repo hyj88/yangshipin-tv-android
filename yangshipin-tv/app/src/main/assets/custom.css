@@ -1,0 +1,440 @@
+/* ============================================================
+   自定义源页 —— 在 inject.css 之上的一层「差异补丁」
+
+   本文件与 inject.css / inject.js 的关系：
+     · inject.css / inject.js 是【原样】复用的（面板观感、整行对齐滚动、
+       5 秒自动隐藏、触摸手势都在那边，和主界面完全一致）。
+     · 本文件只做三件事：
+         ① 把页面背景全透明 —— 原生 VideoView 就在这层 WebView【下面】，
+            挡住就看不到画面了（这是最要命的一条，见 §1）。
+         ② 把 tab 从「图片 logo」换成「文字」并调整配色。
+         ③ 加上管理浮层 + 屏上键盘的样式。
+     · 因此这里的规则绝大多数都要 !important —— inject.css 通篇是 !important，
+       同优先级下靠「后加载」取胜（custom.css 在 inject.css 之后引入）。
+
+   ⚠️ 本文件是 app/src/main/assets 下的唯一正本，没有 tools/ 副本。
+   ============================================================ */
+
+/* ---------- 1. 全局透明化 ----------
+   inject.css §1 给 html/body 压了 background:#000，
+   §3 又给 #app / .tv-main-con 撑满 —— 这些在央视频页面上是必要的（遮住站点内容），
+   在这里却会把原生视频整个盖掉。全部改透明。 */
+html, body {
+  background: transparent !important;
+}
+#app,
+#app > .tv-main-con,
+.tv-main-con {
+  background: transparent !important;
+}
+
+/* 自定义源页没有站点播放器容器，不要为了「结构完整」造一个 ——
+   .tv-main-con-l 是 position:fixed + 不透明黑底，造出来视频就没了。 */
+
+/* ---------- 2. tab：文字版 ----------
+   inject.css §5 假设 tab 里是 <img>（CCTV / 卫视 两个 logo）。
+   这里换成文字，所以要自己定尺寸和选中态。 */
+.tv-main-con-r-tab {
+  justify-content: flex-start !important;
+  gap: 0 !important;
+  overflow-x: auto !important;
+  scrollbar-width: none !important;
+}
+.tv-main-con-r-tab::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: none !important; }
+
+.tv-main-con-r-tab-img {
+  flex: 0 0 auto !important;
+  height: 100% !important;
+  padding: 0 2.6vh !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: rgba(216, 216, 220, 0.72) !important;
+  font-size: calc(var(--char-size) * 0.92) !important;
+  font-weight: 500 !important;
+  white-space: nowrap !important;
+  border-bottom: 0.4vh solid transparent !important;
+  transition: color 0.15s ease, border-color 0.15s ease !important;
+}
+/* 当前分组 */
+.tv-main-con-r-tab-img.on {
+  color: #ffffff !important;
+  border-bottom-color: var(--chan-active) !important;
+}
+
+/* ---------- 2.5 「＋ 添加自定义源」入口（inject.js 的入口机制，v1.8）----------
+   inject.js 会在 tab 与频道列表之间挂 #ysp-custom-entry。主界面那行的动作是
+   「打开自定义源」；本页（自定义源页）动作换成「打开源管理」，inject.js 靠
+   .ysp-entry-add 类区分（只有本页会加这个类）。
+   底色必须压深：本页入口下面垫的是【视频画面】，不是站点那种深色底，
+   inject.css 给的 16% 品牌红透明度在亮画面上会发飘，白字直接糊。 */
+#ysp-custom-entry.ysp-entry-add {
+  background: rgba(16, 16, 20, 0.86) !important;
+  color: #ffffff !important;
+  font-weight: 600 !important;
+}
+#ysp-custom-entry.ysp-entry-add.ysp-focus {
+  background: var(--chan-active) !important;
+}
+
+/* ---------- 3. 行上的补充标记 ----------
+   用 ::after + attr(data-mark) 画，而不是往 <span> 里塞元素：
+   inject.js 的 labelAt() 取的是 row.innerText，塞进去的 ✕/⚠ 会被一起读出来，
+   换台气泡就会变成「CCTV-1✕」。伪元素内容不进 innerText，正好。
+     data-mark="✕"  删除模式
+     data-mark="⚠" 这条源上次播放失败
+   真正在播的那一行仍由 inject.js 打 .tvSelect（央视红底白字）。 */
+.tv-main-con-r-list-left > div.ysp-row {
+  position: relative !important;
+}
+.tv-main-con-r-list-left > div.ysp-row[data-mark]::after {
+  content: attr(data-mark) !important;
+  position: absolute !important;
+  right: 2.6vh !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  font-size: calc(var(--char-size) * 0.9) !important;
+  line-height: 1 !important;
+  color: var(--chan-text, #d8d8dc) !important;
+  pointer-events: none !important;
+}
+.tv-main-con-r-list-left > div.ysp-row[data-mark="✕"]::after { color: #ff6b6b !important; }
+.tv-main-con-r-list-left > div.ysp-row[data-mark="⚠"]::after { color: #ffb86b !important; }
+/* 标记占位：名字别顶到标记上 */
+.tv-main-con-r-list-left > div.ysp-row[data-mark] > span {
+  padding-right: 5.4vh !important;
+}
+
+/* 名字超长要出省略号。
+   ⚠️ 不能把 overflow/text-overflow 直接写在行里的 <span> 上：inject.css 把那个
+      span 设成了 display:flex，而 text-overflow 对 flex 容器【不生效】——
+      文字会被硬剪在面板边缘，连个「…」都没有。
+      （央视频那边台名只有几个字，一直没暴露这个问题；自定义源的 m3u 名字很长。）
+      所以在里面再套一层 block 元素来承接省略号，flex 负责垂直居中。 */
+.tv-main-con-r-list-left > div.ysp-row > span > .ysp-t {
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+/* 上次失败的源整体压暗，一眼能挑出来 */
+.tv-main-con-r-list-left > div.ysp-row.bad:not(.tvSelect):not(.ysp-focus) > span {
+  color: rgba(216, 216, 220, 0.5) !important;
+}
+/* 空态说明。
+   ⚠️ 放在 .tv-main-con-r 里、【不能】放进 .tv-main-con-r-list-left ——
+      inject.js 的 rows() 把列表的直接子元素全当频道行，放进去就会变成
+      一个「能被光标选中、按确认却什么也不发生」的幽灵条目。 */
+.ysp-empty {
+  display: none !important;
+  position: absolute !important;
+  left: 0 !important; right: 0 !important;
+  top: 11vh !important;
+  padding: 0 2.6vh !important;
+  box-sizing: border-box !important;
+  color: rgba(216, 216, 220, 0.62) !important;
+  font-size: calc(var(--char-size) * 0.78) !important;
+  line-height: 1.7 !important;
+}
+.tv-main-con-r.ysp-no-src .ysp-empty { display: block !important; }
+
+/* ============================================================
+   4. 管理浮层
+   挂在 #app 里面（不是 body）—— inject.css §1 的
+   `body > *:not(#app):not(#ysp-toast){display:none!important}` 会把它干掉。
+   ============================================================ */
+#ysp-manage {
+  position: fixed !important;
+  left: 0 !important; top: 0 !important; right: 0 !important; bottom: 0 !important;
+  z-index: 1200 !important;
+  display: none !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  padding-left: 7vw !important;
+  box-sizing: border-box !important;
+  background: rgba(0, 0, 0, 0.62) !important;
+  font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif !important;
+}
+#ysp-manage.on { display: flex !important; }
+
+/* 手机上浮层里的菜单项和键盘键都是可点的（见 custom.js onManagePointer）。
+   touch-action: manipulation 关掉「双击缩放」和 300ms 点击延迟 ——
+   不设的话 Android WebView 会等 300ms 才派发 click，快速连点时还会被判成缩放。
+   user-select: none 防止长按选中文字时弹出选择菜单（会挡住第二次点击）。 */
+#ysp-manage {
+  touch-action: manipulation !important;
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  -webkit-tap-highlight-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+/* 管理浮层展开时把左侧源列表面板整个摘掉。
+   为什么用 display:none 而不是「滑出屏幕」：
+     ① 屏幕空间让给浮层，别两块东西一起抢眼睛；
+     ② 更实际的原因 —— 面板不可见后 inject.js 的 rows() 恒为空，
+        move() / openPanel() 全部变成空操作。这样就算手机端的手势层
+        在浮层上误触，也不会在背后偷偷换台。
+   （能压过 inject.css 的 `.tv-main-con-r{display:flex!important}`：
+     它 1 个类，本文 1 个类 + 1 个元素/类，优先级更高。） */
+body.ysp-managing .tv-main-con-r {
+  display: none !important;
+}
+
+.mg-card {
+  width: 60vw !important;
+  max-width: 1000px !important;
+  max-height: 84vh !important;
+  display: flex !important;
+  flex-direction: column !important;
+  background: rgba(16, 16, 19, 0.97) !important;
+  border: 1px solid rgba(255, 255, 255, 0.10) !important;
+  border-radius: 1.2vh !important;
+  box-shadow: 0 2vh 6vh rgba(0, 0, 0, 0.8) !important;
+  overflow: hidden !important;
+}
+
+.mg-head {
+  flex: 0 0 auto !important;
+  padding: 2.4vh 3.4vh 1.8vh !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+.mg-title {
+  color: #ffffff !important;
+  font-size: calc(var(--char-size) * 1.15) !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.02em !important;
+}
+.mg-sub {
+  margin-top: 0.8vh !important;
+  color: var(--text-dim, #9aa0a6) !important;
+  font-size: calc(var(--char-size) * 0.78) !important;
+  line-height: 1.5 !important;
+  word-break: break-all !important;
+}
+.mg-sub b { color: #ffd166 !important; font-weight: 600 !important; }
+
+/* 局域网导入地址：这是本页唯一需要用户「照着念/照着敲」的东西，
+   所以单独做成高对比色块，而不是塞在菜单行的尾巴里。 */
+.mg-lan {
+  margin-top: 1.6vh !important;
+  padding: 1.2vh 1.8vh !important;
+  background: rgba(230, 0, 18, 0.10) !important;
+  border: 1px solid rgba(230, 0, 18, 0.45) !important;
+  border-radius: 0.7vh !important;
+}
+.mg-lan-tip {
+  color: rgba(216, 216, 220, 0.68) !important;
+  font-size: calc(var(--char-size) * 0.7) !important;
+  line-height: 1.5 !important;
+}
+.mg-lan-tip.bad {
+  margin-top: 1.4vh !important;
+  color: #ff9c9c !important;
+}
+.mg-lan-url {
+  margin-top: 0.5vh !important;
+  color: #ffffff !important;
+  font-size: calc(var(--char-size) * 1.0) !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.03em !important;
+  font-family: "SF Mono", Menlo, Consolas, monospace !important;
+  word-break: break-all !important;
+}
+
+.mg-list {
+  flex: 1 1 auto !important;
+  overflow-y: auto !important;
+  scrollbar-width: none !important;
+  padding: 1.2vh 0 !important;
+  /* 手机上必须能【滑】。只写 overflow-y:auto 还不够：默认的 touch-action:auto
+     会让浏览器在快速轻扫时先猜「你是不是要缩放」，猜错就把这次手势吞掉，
+     列表纹丝不动 —— 表现就是「菜单只看得见 3 项，下面几项怎么划都不动」。 */
+  touch-action: pan-y !important;
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior: contain !important;
+}
+.mg-list::-webkit-scrollbar { width: 0 !important; display: none !important; }
+
+/* ---------------------------------------------------------------
+   手机横屏：菜单只能看到 3 项的问题（点不到 == 没有）
+   ---------------------------------------------------------------
+   实测（手机 API 36 横屏，viewport 732×412）：
+   `.mg-card` 是 84vh，头部那两组局域网/清单地址又占掉一大截，
+   留给 `.mg-list` 的只有 123px —— 正好 3 行。8 项菜单里
+   「清空全部源」在 top=416，落在可视区 [205,328] 之外，**手指点不到**。
+   电视上是滚动 + 方向键，够不着无所谓；手机上没有方向键，点不到就是没有。
+
+   两处压缩（只在触摸设备生效，电视布局一点不动）：
+     ① 头部地址块压扁（小写提示 + 地址只留一行、超长省略）；
+     ② 卡片高度放到 92vh、行高略降，让 8 项尽量一屏排完。
+   ⚠️ 用 @media (hover: none) 而不是 JS 判断设备 —— 电视接了 HDMI 触控板时
+      hover 也会是 none，那时多给点空间没有坏处。
+--------------------------------------------------------------- */
+@media (hover: none) {
+  .mg-card {
+    max-height: 92vh !important;
+    width: 86vw !important;
+  }
+  .mg-head { padding-bottom: 0.6vh !important; }
+  .mg-lan { margin-top: 0.8vh !important; }
+  .mg-lan-tip { font-size: calc(var(--char-size) * 0.6) !important; }
+  .mg-lan-url {
+    /* 地址只留一行：手机上没人读这串字，它是给用户照着输到浏览器里的提示，
+       完整值在「局域网导入」那一项的 tail 上也会给。 */
+    max-height: 3.4vh !important;
+    overflow: hidden !important;
+    font-size: calc(var(--char-size) * 0.82) !important;
+  }
+  .mg-item { padding: 1.05vh 3.4vh !important; }
+  /* 触摸设备没有 hover，点到哪里都要有明确的即时反馈 */
+  .mg-item:active { background: rgba(255, 255, 255, 0.14) !important; }
+}
+
+/* 列表上下边缘的「淡出」。
+   ⚠️ 列表高度不可能永远是行高的整数倍（头部要显示两组地址，高度随内容变），
+      所以底部常常停着「半行」（§9 那条「行高凑整行」管的是滚动对齐，管不了这个）。
+      用 mask 把那一截抹掉：不占布局（高度不变 → 也不影响 scrollMenuIntoView 的算法），
+      比一刀切的边框干净得多。三种组合分别对应「上面还有 / 下面还有 / 两边都有」。 */
+.mg-list.cut-bot {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 3.6vh), rgba(0,0,0,0) 100%) !important;
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 3.6vh), rgba(0,0,0,0) 100%) !important;
+}
+.mg-list.cut-top {
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 0, #000 2.6vh) !important;
+  mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 0, #000 2.6vh) !important;
+}
+.mg-list.cut-both {
+  -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 0, #000 2.6vh, #000 calc(100% - 3.6vh), rgba(0,0,0,0) 100%) !important;
+  mask-image: linear-gradient(to bottom, rgba(0,0,0,0) 0, #000 2.6vh, #000 calc(100% - 3.6vh), rgba(0,0,0,0) 100%) !important;
+}
+
+/* 列表放不下时，在底部／顶部边缘提示「还有多少项」。
+   ⚠️ 非有不可的原因：`.mg-list` 把滚动条关掉了（电视上不该出现滚动条），
+      而 scrollMenuIntoView() 只保证「当前选中项可见」—— 光标停在第一项时，
+      后面几项确实被裁在卡片外，界面上却一点迹象都没有，看上去就像菜单少了半截。
+      这条提示就是那唯一的迹象。 */
+.mg-more {
+  flex: 0 0 auto !important;
+  display: none !important;
+  padding: 1.6vh 3.4vh 0.7vh !important;
+  /* 底色不再自己做渐变：上面 `.mg-list` 的 mask 已经把边缘淡掉了，
+     这里再叠一层只会糊成两段。这就是一行纯文字提示。 */
+  color: rgba(216, 216, 220, 0.62) !important;
+  font-size: calc(var(--char-size) * 0.68) !important;
+  line-height: 1.5 !important;
+  letter-spacing: 0.02em !important;
+  white-space: pre !important;
+  text-align: center !important;
+}
+.mg-more.on { display: block !important; }
+
+.mg-item {
+  display: flex !important;
+  align-items: center !important;
+  min-height: calc(var(--char-size) * 2.6) !important;
+  padding: 0.6vh 3.4vh !important;
+  box-sizing: border-box !important;
+  color: var(--chan-text, #d8d8dc) !important;
+  font-size: calc(var(--char-size) * 0.92) !important;
+  line-height: 1.35 !important;
+  border-left: 0.5vh solid transparent !important;
+}
+.mg-item .mg-tail {
+  margin-left: auto !important;
+  color: rgba(216, 216, 220, 0.5) !important;
+  font-size: calc(var(--char-size) * 0.78) !important;
+  padding-left: 1.6vh !important;
+  white-space: nowrap !important;
+}
+.mg-item.on {
+  background: rgba(255, 255, 255, 0.12) !important;
+  border-left-color: var(--chan-active) !important;
+  color: #ffffff !important;
+}
+.mg-item.on .mg-tail { color: rgba(255, 255, 255, 0.75) !important; }
+.mg-item.danger { color: #ff8a8a !important; }
+.mg-item.danger.on { color: #ffffff !important; background: rgba(230, 0, 18, 0.55) !important; }
+.mg-item.dim { color: rgba(216, 216, 220, 0.45) !important; }
+
+.mg-foot {
+  flex: 0 0 auto !important;
+  padding: 1.4vh 3.4vh 2vh !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: rgba(216, 216, 220, 0.55) !important;
+  font-size: calc(var(--char-size) * 0.7) !important;
+  line-height: 1.5 !important;
+}
+
+/* ============================================================
+   5. 屏上键盘（遥控器打字用）
+   ============================================================ */
+#ysp-kb {
+  width: 68vw !important;
+  max-width: 1180px !important;
+}
+.kb-field {
+  margin-top: 1.6vh !important;
+  padding: 1.2vh 2vh !important;
+  background: rgba(0, 0, 0, 0.5) !important;
+  border: 1px solid rgba(255, 255, 255, 0.10) !important;
+  border-radius: 0.7vh !important;
+}
+.kb-field.active { border-color: var(--chan-active) !important; }
+.kb-label {
+  color: rgba(216, 216, 220, 0.55) !important;
+  font-size: calc(var(--char-size) * 0.68) !important;
+  letter-spacing: 0.12em !important;
+}
+.kb-value {
+  margin-top: 0.4vh !important;
+  color: #ffffff !important;
+  font-size: calc(var(--char-size) * 0.9) !important;
+  min-height: calc(var(--char-size) * 1.3) !important;
+  word-break: break-all !important;
+  line-height: 1.35 !important;
+}
+.kb-value .caret {
+  display: inline-block !important;
+  width: 0.18em !important;
+  height: 1em !important;
+  vertical-align: -0.12em !important;
+  background: var(--chan-active) !important;
+  animation: kb-blink 1s steps(1) infinite !important;
+}
+@keyframes kb-blink { 0%, 50% { opacity: 1 } 50.01%, 100% { opacity: 0 } }
+
+.kb-rows { margin-top: 1.6vh !important; }
+.kb-row { display: flex !important; justify-content: center !important; }
+/* 手机上按键必须有按下反馈 —— 触屏没有 hover，不给反馈的话
+   用户会以为没点到（而且屏上键盘一打字就整块重绘，没有反馈真的分不清）。 */
+@media (hover: none) {
+  .kb-key { touch-action: manipulation !important; }
+  .kb-key:active { background: rgba(255, 255, 255, 0.22) !important; }
+  .kb-field:active { border-color: var(--chan-active) !important; }
+}
+.kb-key {
+  min-width: calc(var(--char-size) * 1.9) !important;
+  height: calc(var(--char-size) * 1.9) !important;
+  margin: 0.28vh !important;
+  padding: 0 0.7vh !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: rgba(255, 255, 255, 0.075) !important;
+  border-radius: 0.5vh !important;
+  color: var(--chan-text, #d8d8dc) !important;
+  font-size: calc(var(--char-size) * 0.82) !important;
+  white-space: nowrap !important;
+}
+.kb-key.wide { min-width: calc(var(--char-size) * 5) !important; }
+.kb-key.on {
+  background: var(--chan-active) !important;
+  color: #ffffff !important;
+  font-weight: 600 !important;
+}
+.kb-key.fn { background: rgba(255, 255, 255, 0.14) !important; }
+.kb-key.fn.on { background: #ffffff !important; color: #101012 !important; }
