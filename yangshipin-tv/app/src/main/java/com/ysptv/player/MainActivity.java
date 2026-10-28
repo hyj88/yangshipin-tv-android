@@ -347,11 +347,22 @@ public class MainActivity extends TvShellActivity {
 
     private void js(final String code) {
         if (web == null) return;
-        ui.post(new Runnable() {
-            @Override public void run() {
-                try { web.evaluateJavascript(code, null); } catch (Exception e) { Log.w(TAG, "js err", e); }
-            }
-        });
+        /* 按键分发（dispatchKeyEvent）本来就跑在主线程，这里再 ui.post 一圈等于
+           白绕一次消息队列才到 evaluateJavascript。只有从 JS 桥线程这类非主线程
+           路径进来时才需要转投。 */
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            evalJs(code);
+        } else {
+            ui.post(new Runnable() {
+                @Override public void run() { evalJs(code); }
+            });
+        }
+    }
+
+    private void evalJs(String code) {
+        try {
+            if (web != null) web.evaluateJavascript(code, null);
+        } catch (Exception e) { Log.w(TAG, "js err", e); }
     }
 
     /** 注入样式 + 交互脚本（幂等，可反复调用） */

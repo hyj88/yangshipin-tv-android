@@ -14,6 +14,10 @@
      [设备]  真机行为：单键零延迟、连按只发一车、按回当前台撤单、
              切 tab 撤单、连按 6 次后播放器仍然活着
 
+   v1.13 起静态段额外盯四件「手感」优化的形态（都不需要设备）：
+     阀门提前解锁（含硬下限 + 到点兜底）、playerSettled 判据、
+     换台气泡守到出画、收起态一次按键只算一次 rows() 且不画光标。
+
    用法：
      node tools/switch_throttle_test.mjs            # 全跑
      node tools/switch_throttle_test.mjs static     # 只跑静态段（无需设备）
@@ -78,6 +82,34 @@ if (MODE === 'static' || MODE === 'all') {
     /setSwitchGap: function \(ms\)/.test(js) && /switchPending: function \(\)/.test(js) && /switchGateLeft: function \(\)/.test(js));
   check('注释里记了实测依据（wedge_repro / detachMedia）',
     /detachMedia/.test(js) && /120ms 连按 6 次/.test(js));
+
+  /* ---- v1.13 换台手感优化 ---- */
+  check('排队期间有提前解锁：站点一出画就发，不必傻等满阀门',
+    /armEarlyUnlock\(wait\);/.test(js) && /function armEarlyUnlock\(/.test(js));
+  check('提前解锁有硬下限：两次碰站点播放器至少隔 60% 阀门',
+    /var floor = Math\.round\(SWITCH_GAP_MS \* 0\.6\);/.test(js));
+  check('提前解锁到点仍然照发（判不出就绪时行为同老逻辑，不会死等）',
+    /var left = deadline - Date\.now\(\);[\s\S]{0,120}left <= 0/.test(js));
+  check('playerSettled 判据：readyState>=3 / 未暂停 / 网络空闲 / 有画面',
+    /if \(v\.readyState < 3\) return false;/.test(js)
+    && /if \(v\.paused\) return false;/.test(js)
+    && /if \(v\.networkState !== 1\) return false;/.test(js)
+    && /return v\.currentTime > 0 && v\.videoWidth > 0;/.test(js));
+  check('提前解锁发车时也清 unlockTimer，不会和「到点发车」叠发',
+    /if \(unlockTimer\) \{ clearTimeout\(unlockTimer\); unlockTimer = 0; \}/.test(js));
+  check('cancelSwitch / flushSwitch 也撤提前解锁（按回当前台不能残留）',
+    /function cancelSwitch\(\)[\s\S]{0,200}clearTimeout\(unlockTimer\)/.test(js)
+    && /function flushSwitch\(\)[\s\S]{0,200}clearTimeout\(unlockTimer\)/.test(js));
+  check('换台气泡守到出画再撤（showToastHold），且换台两条路都用它',
+    /function showToastHold\(/.test(js)
+    && /showToastHold\(labelAt\(target, rs\)\);/.test(js)
+    && /showToastHold\(name\);/.test(js));
+  check('收起态一次按键只算一次 rows()（playingIndex / labelAt 收快照传下去）',
+    /var cur = playingIndex\(rs\);/.test(js) && /labelAt\(target, rs\)/.test(js));
+  check('收起态不再 paint(false)：面板在屏幕外，画光标是白费',
+    /if \(panelOpen\) paint\(true\);/.test(js));
+  check('导出 playerSettled 供测试读取',
+    /playerSettled: playerSettled,/.test(js));
 }
 
 /* ================= 设备段 ================= */

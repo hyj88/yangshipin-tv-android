@@ -21,7 +21,7 @@ keystore.properties
 # 仓库里只保留「最新一版 release APK」作为安装入口（见 README），
 # 其余历史版本与全部截图不入库（加起来 130M+，对源码仓库没有价值）。
 dist/*
-!dist/yangshipin-tv-1.12-release.apk
+!dist/yangshipin-tv-1.13-release.apk
 !dist/README.md
 
 # ---- 截图目录（每轮跑测试都会重新生成）----

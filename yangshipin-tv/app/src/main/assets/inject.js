@@ -46,6 +46,7 @@
   var panelOpen = false;
   var hideTimer = null;
   var toastTimer = null;
+  var holdToastTimer = null;
 
   // ------------------------------------------------------------------
   // 换台节流（v1.7）
@@ -88,6 +89,21 @@
   var SWITCH_DEBOUNCE_MS = 250;
   var switchDebTimer = 0;          // 防抖定时器 id
   var debWant = -1;                // 防抖挂起时的目标下标（move 的续算基点）
+
+  /* ---- 阀门提前解锁（v1.13）----
+     老逻辑是「排队之后傻等满 SWITCH_GAP_MS」。问题是站点自己的换台只要
+     1.3–1.6s，而阀门压了 1.5s —— 用户正常地一台一台往下翻时，第二次按键
+     经常要白等几百毫秒，那正是"反应慢"的来源之一。
+     改成：一旦站点播放器真的出画（readyState>=3 且在走、网络空闲），
+     就说明上一次「卸旧源 → 挂新源」已经走完，立刻发下一趟，不必等满。
+
+     ⚠️ 两条保险，防止把 v1.7 修好的"播放器被打死"放回来：
+       ① 硬下限 floor = 60% × SWITCH_GAP_MS。就绪判得再快，两次碰站点
+          播放器之间也至少隔这么久（复现死亡的连按间隔是 120ms，差 5 倍以上）。
+       ② 到点 deadline 仍然照发 —— 判不出就绪时行为与老逻辑完全一致，
+          不会把"永远等不到出画"变成死等。 */
+  var EARLY_UNLOCK_MS = 100;       // 就绪轮询间隔
+  var unlockTimer = 0;
 
   // ------------------------------------------------------------------
   // 基础工具
@@ -180,20 +196,36 @@
     return false;
   }
 
-  /* 站点维护的「正在播放」行下标；所在 tab 不是当前 tab 时返回 -1 */
-  function playingIndex() {
-    var rs = rows();
+  /* 站点维护的「正在播放」行下标；所在 tab 不是当前 tab 时返回 -1
+     rs 可传入已有的行快照 —— 一次按键里 rows() 要被问好几遍，
+     每遍都要对约 40 个可见行做 getBoundingClientRect（强制重排）。 */
+  function playingIndex(rs) {
+    rs = rs || rows();
     for (var i = 0; i < rs.length; i++) {
       if (rs[i].classList.contains('tvSelect')) return i;
     }
     return -1;
   }
 
-  function labelAt(i) {
-    var rs = rows();
+  function labelAt(i, rs) {
+    rs = rs || rows();
     if (!rs.length) return '';
     var r = rs[clamp(i, rs.length)];
     return (r.innerText || '').trim().replace(/\s+/g, ' ');
+  }
+
+  /* 站点播放器是不是真的出画了。
+     换台时站点会卸掉旧 video、挂新的，整个重 sourcing 期间 readyState 掉到 0，
+     所以这个判据天然就把"还在换"排除了。用于：
+       · 阀门提前解锁（见上面 EARLY_UNLOCK_MS 那段）
+       · 换台气泡守到出画再撤（见 showToastHold） */
+  function playerSettled() {
+    var v = document.querySelector('.tv-main-con-l video');
+    if (!v) return false;
+    if (v.readyState < 3) return false;          // HAVE_ENOUGH_DATA
+    if (v.paused) return false;
+    if (v.networkState !== 1) return false;      // NETWORK_IDLE：没有在起播/在缓冲
+    return v.currentTime > 0 && v.videoWidth > 0;
   }
 
   /* 真实点击：部分处理绑在 mousedown/mouseup 上，仅 click() 不触发 */
@@ -223,22 +255,47 @@
   function fireSwitch(target, immediate) {
     switchWant = -1;
     if (switchTimer) { clearTimeout(switchTimer); switchTimer = 0; }
+    if (unlockTimer) { clearTimeout(unlockTimer); unlockTimer = 0; }
     if (target < 0) return false;
     if (!immediate) {
       var wait = switchGateUntil - Date.now();
       if (wait > 0) {
         switchWant = target;
         switchTimer = setTimeout(function () { fireSwitch(switchWant, true); }, wait);
-        return true;                       // 已排队，稍后发车
+        armEarlyUnlock(wait);   // 一出画就提前发
+        return true;
       }
     }
     switchGateUntil = Date.now() + SWITCH_GAP_MS;
     return activateAt(target);
   }
 
+  /* 排队期间盯着站点播放器：一出画就把待发车立刻发掉。
+     fireSwitch(t, true) 自己会清掉上面那个"到点发车"的 switchTimer，
+     所以两条路只会中一条，不会叠发。 */
+  function armEarlyUnlock(wait) {
+    if (unlockTimer) { clearTimeout(unlockTimer); unlockTimer = 0; }
+    var armedAt = Date.now();
+    var deadline = armedAt + wait;
+    var floor = Math.round(SWITCH_GAP_MS * 0.6);   // 硬下限，见上面注释里的保险①
+    var tick = function () {
+      if (switchWant < 0) { unlockTimer = 0; return; }     // 单被撤了（按回当前台）
+      var left = deadline - Date.now();
+      if (left <= 0 || (Date.now() - armedAt >= floor && playerSettled())) {
+        unlockTimer = 0;
+        var t = switchWant;
+        fireSwitch(t, true);
+        return;
+      }
+      unlockTimer = setTimeout(tick, EARLY_UNLOCK_MS);
+    };
+    unlockTimer = setTimeout(tick, EARLY_UNLOCK_MS);
+  }
+
   /* 取消待发车（目标已经等价于当前播放时调用，见 move()） */
   function cancelSwitch() {
     if (switchTimer) { clearTimeout(switchTimer); switchTimer = 0; }
+    if (unlockTimer) { clearTimeout(unlockTimer); unlockTimer = 0; }
     switchWant = -1;
     // ⚠️ 防抖也要一起撤：不然「按回当前正在播的那台」之后，
     //    那个还挂着的防抖定时器会在 250ms 后照旧发一趟车 ——
@@ -251,6 +308,7 @@
   function flushSwitch() {
     var t = switchWant;
     if (switchTimer) { clearTimeout(switchTimer); switchTimer = 0; }
+    if (unlockTimer) { clearTimeout(unlockTimer); unlockTimer = 0; }
     switchWant = -1;
     if (t >= 0) { switchGateUntil = Date.now() + SWITCH_GAP_MS; activateAt(t); }
   }
@@ -259,8 +317,7 @@
   // 提示气泡
   // ------------------------------------------------------------------
 
-  function showToast(text) {
-    if (!text) return;
+  function toastEl() {
     var el = document.getElementById('ysp-toast');
     if (!el) {
       el = document.createElement('div');
@@ -273,10 +330,50 @@
       var host = document.body || document.querySelector('#app') || document.documentElement;
       host.appendChild(el);
     }
+    return el;
+  }
+
+  function hideToast() {
+    var el = document.getElementById('ysp-toast');
+    if (el) el.classList.remove('show');
+  }
+
+  function showToast(text) {
+    if (!text) return;
+    var el = toastEl();
     el.textContent = text;
     el.classList.add('show');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { el.classList.remove('show'); }, 1600);
+    clearTimeout(holdToastTimer);
+    toastTimer = setTimeout(hideToast, 1600);
+  }
+
+  /* 换台专用的气泡：守到真的出画再撤（v1.13）。
+     站点换台要 1.3–1.6s，而普通气泡 1.6s 就撤 —— 于是「提示没了、画面还是
+     上一台」，中间那段空窗用户读起来就是"卡住了"。守到 playerSettled()
+     或最多 cap，再留 900ms 让人看清台名。 */
+  function showToastHold(text, maxMs) {
+    if (!text) return;
+    var el = toastEl();
+    el.textContent = text;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    clearTimeout(holdToastTimer);
+    /* 页面上根本没有 <video>（inject.js 被自定义源页复用，那边是原生播放器）
+       → 没有"出画"可等，按普通气泡的节奏撤，别白等满 cap。 */
+    if (!document.querySelector('.tv-main-con-l video')) {
+      toastTimer = setTimeout(hideToast, 1600);
+      return;
+    }
+    var t0 = Date.now();
+    var cap = maxMs || 6000;
+    (function wait() {
+      if (playerSettled() || Date.now() - t0 > cap) {
+        toastTimer = setTimeout(hideToast, 900);
+        return;
+      }
+      holdToastTimer = setTimeout(wait, 120);
+    })();
   }
 
   // ------------------------------------------------------------------
@@ -474,7 +571,7 @@
        表现为「按 5 下只换了 1 台」（实测 idx 停在 from+1）。
        所以「意图」有两个来源：阀门里的 switchWant 和防抖里的 debWant，
        谁有值就从谁续。 */
-    var cur = playingIndex();
+    var cur = playingIndex(rs);
     var intend = (switchWant >= 0) ? switchWant
                : (switchDebTimer && debWant >= 0) ? debWant
                : -1;
@@ -484,8 +581,14 @@
     else target = clamp(cur + d, rs.length);
 
     idx = target;
-    paint(false);
-    showToast(labelAt(target));
+    /* 面板收起时画光标没有任何可见效果（整个面板被 translateX(-101%) 挪出屏幕），
+       却要 clearFocus() 扫 40 行 + ensureEntry() 查一次 DOM，纯白费。
+       开面板时 openPanel() 会 paint(true) 补上，所以收起态直接跳过。
+       另外上面 rows() 只算了一遍就传下去 —— 早先这一趟按键要算 4 次
+       （move / playingIndex / labelAt / paint），每遍都是一次强制重排。 */
+    if (panelOpen) paint(true);
+    /* 气泡守到出画：见 showToastHold 的注释 */
+    showToastHold(labelAt(target, rs));
     /* 按回了当前正在播的那一台 → 撤掉待发车，别做无用功（也少惊动站点播放器） */
     if (target === cur) { cancelSwitch(); clearDebounce(); return idx; }
     /* 连续按 → 只排一个防抖，不再每按一次就发一趟车。
@@ -525,7 +628,7 @@
     var name = labelAt(idx);
     var ok = fireSwitch(idx);          // 同样过阀门：面板刚收起时可能还有车在途中
     closePanel();
-    showToast(name);
+    showToastHold(name);               // 同样是换台，气泡也守到出画
     return ok;
   }
 
@@ -871,6 +974,7 @@
     switchGap: function () { return SWITCH_GAP_MS; },
     switchPending: function () { return switchWant; },       // 待发车目标，-1 = 无
     switchGateLeft: function () { return Math.max(0, switchGateUntil - Date.now()); },
+    playerSettled: playerSettled,     // 站点播放器是否已出画（提前解锁 / 气泡守屏都用它）
     cancelSwitch: cancelSwitch,
     flushSwitch: flushSwitch
   };
