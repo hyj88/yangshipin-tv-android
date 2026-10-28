@@ -32,30 +32,38 @@ for f in custom.html custom.css custom.js inject.css inject.js lan_import.html; 
 done
 echo "ok      assets/custom.{html,css,js} + lan_import.html"
 
-# --- JDK ---
-# 找 JDK：优先 JAVA_HOME，其次系统 java_home，最后 PATH 里的 javac。
-# ⚠️ 别写死某个开发机的绝对路径 —— 那样别人克隆下来就没法构建。
-if [ -z "$JAVA_HOME" ]; then
-  for cand in \
-      "$(/usr/libexec/java_home 2>/dev/null)" \
-      "$HOME/.workbuddy/binaries/jdk/Contents/Home" \
-      "/Library/Java/JavaVirtualMachines"/*/Contents/Home \
-      "/usr/lib/jvm"/*; do
-    if [ -x "$cand/bin/javac" ]; then export JAVA_HOME="$cand"; break; fi
-  done
+# --- JDK：必须有 JDK 17+，并且用当前仓库的 Wrapper 统一 Gradle 版本 ---
+# 这里不再依赖机器里是否装过某个版本的 Gradle；wrapper 自己下载对应分发包，
+# 这样新环境 / CI / 其它开发机都能复现同一套构建工具链。
+if [ -z "${JAVA_HOME:-}" ]; then
+  JAVA_HOME="$(/usr/libexec/java_home -v 17 2>/dev/null || true)"
+  if [ -z "$JAVA_HOME" ]; then
+    JAVA_HOME="$(/usr/libexec/java_home 2>/dev/null || true)"
+  fi
 fi
+if [ -z "${JAVA_HOME:-}" ] || [ ! -x "$JAVA_HOME/bin/java" ]; then
+  echo "找不到 JDK 17+。请先安装 JDK 17，或执行：export JAVA_HOME=..." >&2
+  exit 1
+fi
+export JAVA_HOME
 echo "JAVA_HOME=$JAVA_HOME"
 
-# --- Android SDK ---
-export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
+# --- Android SDK：优先使用环境变量；否则按常见目录兜底 ---
+export ANDROID_HOME="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}}"
 export ANDROID_SDK_ROOT="$ANDROID_HOME"
+if [ ! -d "$ANDROID_HOME" ] || [ ! -d "$ANDROID_HOME/platforms" ] || [ ! -d "$ANDROID_HOME/build-tools" ]; then
+  echo "Android SDK 未就绪：$ANDROID_HOME" >&2
+  echo "请先安装 platform 34 与 build-tools 36.0.0，或设置 ANDROID_HOME / ANDROID_SDK_ROOT。" >&2
+  exit 1
+fi
 echo "ANDROID_HOME=$ANDROID_HOME"
 
-# --- Gradle：优先用本地缓存发行版，其次 PATH ---
-GRADLE="$(ls -d "$HOME"/.gradle/wrapper/dists/gradle-8.7-bin/*/gradle-8.7/bin/gradle 2>/dev/null | head -1)"
-if [ -z "$GRADLE" ]; then GRADLE="$(command -v gradle || true)"; fi
-if [ -z "$GRADLE" ]; then echo "找不到 Gradle，请先安装 Gradle 8.7+"; exit 1; fi
-echo "GRADLE=$GRADLE"
+# --- Gradle：仓库内 wrapper 统一版本，不再依赖本机全局 Gradle ---
+if [ ! -x "$PWD/gradlew" ]; then
+  echo "找不到 ./gradlew；先在项目根目录生成 wrapper（gradle wrapper --gradle-version 8.7）。" >&2
+  exit 1
+fi
+echo "GRADLE_WRAPPER=./gradlew"
 
 # --- 先 clean ---
 # ⚠️ 必须 clean，别指望增量。踩过一次，代价是一整轮回归跑在旧包上：
@@ -63,9 +71,9 @@ echo "GRADLE=$GRADLE"
 #   release 是新的、debug 却是旧的（`mergeDebugAssets` 认了缓存），
 #   而设备端套件用的是 debug 包 —— 于是「跑绿了」这件事本身不成立。
 #   这个工程总共几十个源文件，clean 之后也就几秒，不值得为省这点时间冒这个险。
-"$GRADLE" --no-daemon --console=plain clean
+./gradlew --no-daemon --console=plain clean
 
-"$GRADLE" --no-daemon --console=plain :app:assembleDebug
+./gradlew --no-daemon --console=plain :app:assembleDebug
 
 APK="app/build/outputs/apk/debug/app-debug.apk"
 if [ -f "$APK" ]; then
@@ -90,7 +98,7 @@ fi
 if [ "${1:-}" = "release" ]; then
   VER="$(grep -m1 'versionName' app/build.gradle | sed -E 's/.*"([^"]+)".*/\1/')"
   [ -z "$VER" ] && { echo "读不到 versionName"; exit 1; }
-  "$GRADLE" --no-daemon --console=plain :app:assembleRelease
+  ./gradlew --no-daemon --console=plain :app:assembleRelease
   REL="app/build/outputs/apk/release/app-release.apk"
   if [ -f "$REL" ]; then
     OUT="../dist/yangshipin-tv-${VER}-release.apk"

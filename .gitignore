@@ -8,7 +8,11 @@ build/
 *.dex
 *.class
 *.jar
-!gradle/wrapper/gradle-wrapper.jar
+# ⚠️ 必须是 **/：wrapper 在 yangshipin-tv/gradle/wrapper/ 下，比仓库根深一层。
+#    写成 !gradle/wrapper/gradle-wrapper.jar 匹配不到实际路径，
+#    结果 gradlew / gradlew.bat / .properties 都进了库、唯独 jar 被忽略 ——
+#    克隆下来 ./gradlew 直接跑不了，CI 一推就挂。
+!**/gradle/wrapper/gradle-wrapper.jar
 
 # ---- 本机配置（绝不能提交：含本机绝对路径）----
 local.properties

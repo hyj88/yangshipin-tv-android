@@ -22,11 +22,15 @@ m3u8 / mp4）。零第三方依赖 —— 整个 App 只用 Android Framework。
 adb install dist/yangshipin-tv-1.12-release.apk
 ```
 
-或自己构建（需要 JDK 11+ 与 Android SDK）：
+或自己构建（需要 JDK 17+ 与 Android SDK；工程已内置 Gradle Wrapper，不依赖机器里装过的 Gradle）：
 
 ```bash
+cd yangshipin-tv && ./gradlew :app:assembleDebug
+# 或者：
 cd yangshipin-tv && ./build.sh release     # 产物在 ../dist/
 ```
+
+GitHub Actions 会在每次 push、Pull Request 和手动触发时构建 debug APK；成功后可从该次 workflow run 的 Artifacts 下载。
 
 ## 遥控器操作
 

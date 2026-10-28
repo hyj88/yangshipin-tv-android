@@ -233,6 +233,8 @@ Chromium 12x（API 34）上 hls.js 1.5.20 / 0.14.17 都能完美播放；
 
 ## 构建
 
+需要 JDK 17+ 和 Android SDK（platform 34、build-tools 36.0.0）；Gradle 8.7 已通过仓库内的 Wrapper 固定，无需单独安装 Gradle。GitHub Actions 会在 push、Pull Request 和手动触发时构建 debug APK，并将 APK 保留为 workflow artifact。
+
 ```bash
 ./build.sh              # debug 包 → app/build/outputs/apk/debug/app-debug.apk
 ./build.sh release      # 正式包 → ../dist/yangshipin-tv-1.2-release.apk（打印 md5）
@@ -2307,6 +2309,7 @@ DOM 形状，面板观感 / 整行对齐滚动 / 5 秒自动隐藏 / 触摸手�
 ```
 yangshipin-tv/
 ├── build.sh                     一键构建（含 tools/ → assets/ 同步；`build.sh release` 出正式包）
+├── gradlew / gradle/wrapper/    固定 Gradle 8.7 的 Wrapper
 ├── settings.gradle / build.gradle / gradle.properties / local.properties
 └── app/
     ├── build.gradle
