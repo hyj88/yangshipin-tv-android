@@ -25,14 +25,24 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      # ⚠️ 不要用 android-actions/setup-android：它内部会执行
+      #    `sdkmanager tools`，而 'tools' 包早已从 Android SDK 仓库下架，
+      #    必然以 "Failed to find package 'tools'" 失败（exit 1），
+      #    整个 run 红在"Set up Android SDK"这一步。
+      #    ubuntu-latest 镜像本身就带 Android SDK 与 cmdline-tools，
+      #    直接装我们要用的那两个包就行。
+      - name: Accept Android SDK licenses
+        run: |
+          SM="$(command -v sdkmanager || echo "${ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools/latest/bin/sdkmanager")"
+          yes | "$SM" --licenses >/dev/null 2>&1 || true
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
       - name: Install Android SDK packages
-        run: sdkmanager "platforms;android-34" "build-tools;36.0.0"
+        run: |
+          SM="$(command -v sdkmanager || echo "${ANDROID_HOME:-/usr/local/lib/android/sdk}/cmdline-tools/latest/bin/sdkmanager")"
+          "$SM" "platforms;android-34" "build-tools;36.0.0"
 
       - name: Build debug APK
         working-directory: yangshipin-tv
